@@ -1,4 +1,4 @@
-"""Chronicle application package."""
+"""Chronicle Textual application package."""
 
 from .app import ChronicleApp
 

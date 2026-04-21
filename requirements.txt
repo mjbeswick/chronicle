@@ -1,2 +1,1 @@
-textual>=0.58.1
-markdown>=3.6
+textual>=0.58,<1.0
