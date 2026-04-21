@@ -1,0 +1,2 @@
+textual>=0.58.1
+markdown>=3.6
