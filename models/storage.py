@@ -4,17 +4,15 @@ from __future__ import annotations
 
 import json
 import re
+from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Iterable, Mapping
 from uuid import uuid4
 
 from .journal_entry import JournalEntry
-from .todo import TodoItem
-
-
-_UNSET = object()
+from .todo import UNSET, TodoItem
 
 
 def utc_now() -> datetime:
@@ -55,20 +53,29 @@ class TimelineEvent:
         return self.occurred_at.date().isoformat()
 
 
+@dataclass(frozen=True)
+class TimelineDay:
+    """Timeline events grouped for a calendar day."""
+
+    label: date
+    events: list[TimelineEvent]
+
+
 class FileStorage:
     """Persist Chronicle entries and todos as markdown and JSON files."""
 
     def __init__(self, project_root: str | Path = ".", data_root: str | Path | None = None) -> None:
         self.project_root = Path(project_root).expanduser().resolve()
-        if data_root is None:
-            self.data_root = self.project_root / "data"
-        else:
-            candidate = Path(data_root).expanduser()
-            self.data_root = candidate if candidate.is_absolute() else (self.project_root / candidate)
-            self.data_root = self.data_root.resolve()
+        self.data_root = self._resolve_data_root(data_root)
         self.journal_dir = self.data_root / "journal"
         self.todo_dir = self.data_root / "todos"
         self.ensure_directories()
+
+    def _resolve_data_root(self, data_root: str | Path | None) -> Path:
+        if data_root is None:
+            return (self.project_root / "data").resolve()
+        candidate = Path(data_root).expanduser()
+        return candidate.resolve() if candidate.is_absolute() else (self.project_root / candidate).resolve()
 
     def ensure_directories(self) -> None:
         self.journal_dir.mkdir(parents=True, exist_ok=True)
@@ -76,9 +83,9 @@ class FileStorage:
 
     def create_journal_entry(
         self,
-        *,
         title: str = "Untitled Entry",
         content: str = "",
+        *,
         tags: Iterable[str] | None = None,
         created_at: datetime | None = None,
     ) -> JournalEntry:
@@ -93,6 +100,16 @@ class FileStorage:
             tags=list(tags or []),
         )
         return self.save_journal_entry(entry, touch=False)
+
+    def create_entry(
+        self,
+        title: str,
+        content: str,
+        *,
+        tags: Iterable[str] | None = None,
+        created_at: datetime | None = None,
+    ) -> JournalEntry:
+        return self.create_journal_entry(title, content, tags=tags, created_at=created_at)
 
     def save_journal_entry(self, entry: JournalEntry, *, touch: bool = True) -> JournalEntry:
         previous_stem = entry.file_stem
@@ -126,6 +143,16 @@ class FileStorage:
             entry.tags = list(tags)
         return self.save_journal_entry(entry)
 
+    def update_entry(
+        self,
+        entry_id: str,
+        *,
+        title: str | None = None,
+        content: str | None = None,
+        tags: Iterable[str] | None = None,
+    ) -> JournalEntry:
+        return self.update_journal_entry(entry_id, title=title, content=content, tags=tags)
+
     def get_journal_entry(self, entry_id: str) -> JournalEntry:
         for metadata_path in self._iter_json_files(self.journal_dir):
             metadata = self._read_json(metadata_path)
@@ -153,11 +180,14 @@ class FileStorage:
         self._remove_if_exists(markdown_path)
         self._remove_if_exists(metadata_path)
 
+    def delete_entry(self, entry_id: str) -> None:
+        self.delete_journal_entry(entry_id)
+
     def create_todo(
         self,
-        *,
         title: str = "Untitled Todo",
         description: str = "",
+        *,
         due_date: date | str | None = None,
         created_at: datetime | None = None,
     ) -> TodoItem:
@@ -187,10 +217,10 @@ class FileStorage:
         *,
         title: str | None = None,
         description: str | None = None,
-        due_date: date | str | None | object = _UNSET,
+        due_date: date | str | None | object = UNSET,
         occurred_at: datetime | None = None,
     ) -> TodoItem:
-        todo = self.get_todo(todo_id)
+        todo = self.get_todo(todo_id, include_deleted=True)
         todo.apply_updates(title=title, description=description, due_date=due_date, occurred_at=occurred_at)
         return self.save_todo(todo, touch=False)
 
@@ -201,21 +231,35 @@ class FileStorage:
         *,
         occurred_at: datetime | None = None,
     ) -> TodoItem:
-        todo = self.get_todo(todo_id)
+        todo = self.get_todo(todo_id, include_deleted=True)
         target = (not todo.completed) if completed is None else completed
         todo.set_completed(target, occurred_at=occurred_at)
         return self.save_todo(todo, touch=False)
 
-    def get_todo(self, todo_id: str) -> TodoItem:
+    def toggle_todo_completion(
+        self,
+        todo_id: str,
+        completed: bool | None = None,
+        *,
+        occurred_at: datetime | None = None,
+    ) -> TodoItem:
+        return self.toggle_todo(todo_id, completed, occurred_at=occurred_at)
+
+    def get_todo(self, todo_id: str, *, include_deleted: bool = True) -> TodoItem:
         path = self._todo_path(todo_id)
         if not path.exists():
             raise StorageError(f"Todo not found: {todo_id}")
-        return TodoItem.from_dict(self._read_json(path))
+        todo = TodoItem.from_dict(self._read_json(path))
+        if todo.deleted and not include_deleted:
+            raise StorageError(f"Todo not found: {todo_id}")
+        return todo
 
-    def list_todos(self, *, include_completed: bool = True) -> list[TodoItem]:
+    def list_todos(self, *, include_completed: bool = True, include_deleted: bool = False) -> list[TodoItem]:
         todos: list[TodoItem] = []
         for path in self._iter_json_files(self.todo_dir):
             todo = TodoItem.from_dict(self._read_json(path))
+            if not include_deleted and todo.deleted:
+                continue
             if include_completed or not todo.completed:
                 todos.append(todo)
         return sorted(
@@ -229,11 +273,10 @@ class FileStorage:
             ),
         )
 
-    def delete_todo(self, todo_id: str) -> None:
-        path = self._todo_path(todo_id)
-        if not path.exists():
-            raise StorageError(f"Todo not found: {todo_id}")
-        self._remove_if_exists(path)
+    def delete_todo(self, todo_id: str, *, occurred_at: datetime | None = None) -> None:
+        todo = self.get_todo(todo_id, include_deleted=True)
+        if todo.mark_deleted(occurred_at=occurred_at):
+            self.save_todo(todo, touch=False)
 
     def list_timeline_events(self) -> list[TimelineEvent]:
         events: list[TimelineEvent] = []
@@ -251,7 +294,7 @@ class FileStorage:
                 )
             )
 
-        for todo in self.list_todos(include_completed=True):
+        for todo in self.list_todos(include_completed=True, include_deleted=True):
             for index, history_event in enumerate(todo.history):
                 title, summary = history_event.timeline_label(todo)
                 events.append(
@@ -266,6 +309,7 @@ class FileStorage:
                         metadata={
                             "todo_title": todo.title,
                             "todo_completed": todo.completed,
+                            "todo_deleted": todo.deleted,
                             "action": history_event.action,
                             "field": history_event.changed_field,
                         },
@@ -273,6 +317,12 @@ class FileStorage:
                 )
 
         return sorted(events, key=lambda event: (event.occurred_at, event.id), reverse=True)
+
+    def timeline_events_grouped_by_date(self) -> list[TimelineDay]:
+        grouped: dict[date, list[TimelineEvent]] = defaultdict(list)
+        for event in self.list_timeline_events():
+            grouped[event.occurred_at.date()].append(event)
+        return [TimelineDay(label=day, events=grouped[day]) for day in sorted(grouped.keys(), reverse=True)]
 
     def _journal_file_stem(self, entry: JournalEntry) -> str:
         return f"{entry.created_at.date().isoformat()}_{entry.slug}"
