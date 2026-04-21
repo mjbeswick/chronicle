@@ -41,7 +41,7 @@ class JournalView(Container):
             day_node = tree.root.add(_format_day(day.label), expand=True, data=None)
             for event in day.events:
                 day_node.add_leaf(_format_event_label(event), data=event)
-        tree.root.expand_all()
+        self.call_after_refresh(tree.root.expand_all)
         if tree.root.children:
             tree.select_node(tree.root.children[0])
             first_leaf = next(iter(tree.root.children[0].children), None)

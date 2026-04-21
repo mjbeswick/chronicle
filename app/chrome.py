@@ -32,6 +32,11 @@ class ChronicleHeader(Static):
 
 class StatusBar(Static):
     message = reactive("")
+    voice_state = reactive("idle")  # "idle" | "recording" | "transcribing"
 
     def render(self) -> Text:
+        if self.voice_state == "recording":
+            return Text("🎙  Recording… release space to stop", style="bold white on red")
+        if self.voice_state == "transcribing":
+            return Text("⏳  Transcribing…", style="bold black on yellow")
         return Text(self.message, style="black on white")

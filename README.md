@@ -18,18 +18,26 @@ python3 main.py
 
 ## Install as `chronicle`
 
-For a global command, install it with `pipx`:
+The cleanest option is `pipx`:
 
 ```bash
+brew install pipx
 pipx install git+https://github.com/mjbeswick/chronicle.git
 chronicle
 ```
 
-For local development, you can also install the current checkout:
+For a local editable install on macOS with Homebrew Python:
 
 ```bash
-python3 -m pip install --user -e .
+/opt/homebrew/bin/python3 -m pip install --user --break-system-packages -e .
 chronicle
+```
+
+If `chronicle` is installed but not found, add your user scripts directory to `PATH`:
+
+```bash
+echo 'export PATH="$(/opt/homebrew/bin/python3 -m site --user-base)/bin:$PATH"' >> ~/.zshrc
+source ~/.zshrc
 ```
 
 ## Controls

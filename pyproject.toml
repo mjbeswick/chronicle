@@ -11,6 +11,8 @@ requires-python = ">=3.9"
 dependencies = [
   "platformdirs>=4,<5",
   "textual>=0.58,<1.0",
+  "sounddevice>=0.4",
+  "numpy>=1.20",
 ]
 
 [project.scripts]

@@ -43,7 +43,6 @@ class ChronicleApp(App[None]):
     JournalView, TodosView {
         height: 1fr;
         margin: 1 0;
-        border: round $primary;
     }
 
     Tree, DataTable {
@@ -54,6 +53,11 @@ class ChronicleApp(App[None]):
         height: 1;
         padding: 0 1;
         dock: bottom;
+    }
+
+    EntryFormScreen, TodoFormScreen, EntryDetailScreen, TodoDetailScreen, ConfirmActionScreen, HelpScreen {
+        align: center middle;
+        background: $background 60%;
     }
 
     .modal_window {
@@ -136,6 +140,13 @@ class ChronicleApp(App[None]):
     def on_mount(self) -> None:
         self.refresh_views()
         self._apply_tab_state("journal")
+        import threading
+        from app.voice import warmup
+        threading.Thread(target=warmup, daemon=True).start()
+
+    def set_voice_state(self, state: str) -> None:
+        """Update the status bar voice indicator. Safe to call from any thread."""
+        self.query_one(StatusBar).voice_state = state
 
     def refresh_views(self) -> None:
         self.query_one(JournalView).refresh_view(self.storage.timeline_events_grouped_by_date())
