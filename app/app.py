@@ -4,8 +4,17 @@ from textual.app import App, ComposeResult
 from textual.binding import Binding
 
 from app.chrome import ChronicleHeader, StatusBar
-from app.forms import EntryFormData, EntryFormScreen, HelpScreen, TodoFormData, TodoFormScreen
-from app.models import TimelineEvent, TodoItem
+from app.forms import (
+    ConfirmActionScreen,
+    EntryDetailScreen,
+    EntryFormData,
+    EntryFormScreen,
+    HelpScreen,
+    TodoDetailScreen,
+    TodoFormData,
+    TodoFormScreen,
+)
+from app.models import JournalEntry, TimelineEvent, TodoItem
 from app.storage import ChronicleStorageAdapter, StorageBackend
 from textual.widgets import ContentSwitcher
 from views.journal import JournalView
@@ -75,6 +84,23 @@ class ChronicleApp(App[None]):
         margin-top: 1;
     }
 
+    .detail_window {
+        height: auto;
+        max-height: 90%;
+    }
+
+    .detail_meta, .confirm_text {
+        color: $text-muted;
+        margin-bottom: 1;
+    }
+
+    .detail_markdown {
+        height: 16;
+        border: round $primary;
+        padding: 0 1;
+        margin-top: 1;
+    }
+
     #entry-content {
         height: 8;
     }
@@ -84,6 +110,7 @@ class ChronicleApp(App[None]):
         Binding("j", "switch_tab('journal')", "Journal"),
         Binding("t", "switch_tab('todos')", "Todos"),
         Binding("n", "new_item", "New"),
+        Binding("v", "view_selected", "View"),
         Binding("e", "edit_selected", "Edit"),
         Binding("d", "delete_selected", "Delete"),
         Binding("space", "toggle_todo", "Toggle"),
@@ -157,17 +184,23 @@ class ChronicleApp(App[None]):
             if not selected or not selected.editable or not selected.entry_id:
                 self.notify("Select a journal entry to delete.", severity="warning")
                 return
-            self.storage.delete_entry(selected.entry_id)
-            self.notify("Journal entry deleted.")
+            entry = self._get_entry(selected.entry_id)
+            if entry is None:
+                self.notify("Entry no longer exists.", severity="warning")
+                return
+            self.push_screen(
+                ConfirmActionScreen(f"Delete journal entry '{entry.title}'?", confirm_label="Delete"),
+                lambda confirmed, entry_id=entry.id: self._handle_delete_entry(entry_id, confirmed),
+            )
         else:
             todo = self.query_one(TodosView).selected_todo()
             if todo is None:
                 self.notify("Select a todo to delete.", severity="warning")
                 return
-            self.storage.delete_todo(todo.id)
-            self.notify("Todo deleted.")
-        self.refresh_views()
-        self._apply_tab_state(self.active_tab)
+            self.push_screen(
+                ConfirmActionScreen(f"Delete todo '{todo.title}'?", confirm_label="Delete"),
+                lambda confirmed, todo_id=todo.id: self._handle_delete_todo(todo_id, confirmed),
+            )
 
     def action_toggle_todo(self) -> None:
         if self.active_tab != "todos":
@@ -183,6 +216,35 @@ class ChronicleApp(App[None]):
 
     def action_open_help(self) -> None:
         self.push_screen(HelpScreen())
+
+    def action_view_selected(self) -> None:
+        if self.active_tab == "journal":
+            selected = self.query_one(JournalView).selected_event()
+            if selected is None:
+                self.notify("Select an item to view.", severity="warning")
+                return
+            if selected.entry_id:
+                entry = self._get_entry(selected.entry_id)
+                if entry is None:
+                    self.notify("Entry no longer exists.", severity="warning")
+                    return
+                self.push_screen(EntryDetailScreen(entry))
+                return
+            if selected.todo_id:
+                todo = self._get_todo(selected.todo_id)
+                if todo is None:
+                    self.notify("Todo no longer exists.", severity="warning")
+                    return
+                self.push_screen(TodoDetailScreen(todo))
+                return
+            self.notify("Nothing to view for this item.", severity="warning")
+            return
+
+        todo = self.query_one(TodosView).selected_todo()
+        if todo is None:
+            self.notify("Select a todo to view.", severity="warning")
+            return
+        self.push_screen(TodoDetailScreen(todo))
 
     def on_journal_view_selection_changed(self, message: JournalView.SelectionChanged) -> None:
         self._refresh_status(message.timeline_event)
@@ -207,11 +269,11 @@ class ChronicleApp(App[None]):
                 selected if isinstance(selected, TimelineEvent) else self.query_one(JournalView).selected_event()
             )
             edit_hint = "e edit" if selected_event and selected_event.editable else "e edit entry"
-            message = f"j/t switch tabs  n new entry  {edit_hint}  d delete entry  ? help  q quit"
+            message = f"j/t switch tabs  n new entry  v view  {edit_hint}  d delete entry  ? help  q quit"
         else:
             selected_todo = selected if isinstance(selected, TodoItem) else self.query_one(TodosView).selected_todo()
             toggle_hint = "space toggle" if selected_todo else "space toggle todo"
-            message = f"j/t switch tabs  n new todo  e edit  d delete  {toggle_hint}  ? help  q quit"
+            message = f"j/t switch tabs  n new todo  v view  e edit  d delete  {toggle_hint}  ? help  q quit"
         self.query_one(StatusBar).message = message
 
     def _handle_new_entry(self, result: EntryFormData | None) -> None:
@@ -241,6 +303,26 @@ class ChronicleApp(App[None]):
             self.notify("Todo updated.")
             self.refresh_views()
             self._apply_tab_state("todos")
+
+    def _handle_delete_entry(self, entry_id: str, confirmed: bool) -> None:
+        if confirmed:
+            self.storage.delete_entry(entry_id)
+            self.notify("Journal entry deleted.")
+            self.refresh_views()
+            self._apply_tab_state("journal")
+
+    def _handle_delete_todo(self, todo_id: str, confirmed: bool) -> None:
+        if confirmed:
+            self.storage.delete_todo(todo_id)
+            self.notify("Todo deleted.")
+            self.refresh_views()
+            self._apply_tab_state("todos")
+
+    def _get_entry(self, entry_id: str) -> JournalEntry | None:
+        return next((entry for entry in self.storage.list_journal_entries() if entry.id == entry_id), None)
+
+    def _get_todo(self, todo_id: str) -> TodoItem | None:
+        return next((todo for todo in self.storage.list_todos() if todo.id == todo_id), None)
 
 
 if __name__ == "__main__":

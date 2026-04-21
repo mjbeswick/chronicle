@@ -7,7 +7,7 @@ from typing import Optional
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
-from textual.widgets import Button, Input, Label, Static, TextArea
+from textual.widgets import Button, Input, Label, Markdown, Static, TextArea
 
 from .models import JournalEntry, TodoItem
 
@@ -128,13 +128,119 @@ class TodoFormScreen(ModalScreen[Optional[TodoFormData]]):
         self.dismiss(TodoFormData(title=title, due_date=parsed_due_date))
 
 
+class EntryDetailScreen(ModalScreen[None]):
+    BINDINGS = [("escape", "close", "Back")]
+
+    def __init__(self, entry: JournalEntry) -> None:
+        super().__init__()
+        self.entry = entry
+
+    def compose(self) -> ComposeResult:
+        created = self.entry.created_at.astimezone().strftime("%Y-%m-%d %H:%M")
+        updated = self.entry.updated_at.astimezone().strftime("%Y-%m-%d %H:%M")
+        yield Vertical(
+            Label(self.entry.title, classes="modal_title"),
+            Static(f"Created {created}  Updated {updated}", classes="detail_meta"),
+            Markdown(self.entry.content or "_No content yet._", classes="detail_markdown"),
+            Horizontal(
+                Button("Close", id="close", variant="primary"),
+                classes="modal_actions",
+            ),
+            classes="modal_window detail_window",
+        )
+
+    def on_mount(self) -> None:
+        self.query_one("#close", Button).focus()
+
+    def action_close(self) -> None:
+        self.dismiss(None)
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "close":
+            self.dismiss(None)
+
+
+class TodoDetailScreen(ModalScreen[None]):
+    BINDINGS = [("escape", "close", "Back")]
+
+    def __init__(self, todo: TodoItem) -> None:
+        super().__init__()
+        self.todo = todo
+
+    def compose(self) -> ComposeResult:
+        due_text = self.todo.due_date.isoformat() if self.todo.due_date else "None"
+        status = "Done" if self.todo.completed else "Open"
+        yield Vertical(
+            Label(self.todo.title, classes="modal_title"),
+            Static(f"Status: {status}", classes="detail_meta"),
+            Static(f"Due: {due_text}", classes="detail_meta"),
+            Horizontal(
+                Button("Close", id="close", variant="primary"),
+                classes="modal_actions",
+            ),
+            classes="modal_window detail_window",
+        )
+
+    def on_mount(self) -> None:
+        self.query_one("#close", Button).focus()
+
+    def action_close(self) -> None:
+        self.dismiss(None)
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "close":
+            self.dismiss(None)
+
+
+class ConfirmActionScreen(ModalScreen[bool]):
+    BINDINGS = [("escape", "cancel", "Cancel")]
+
+    def __init__(self, prompt: str, *, confirm_label: str = "Confirm") -> None:
+        super().__init__()
+        self.prompt = prompt
+        self.confirm_label = confirm_label
+
+    def compose(self) -> ComposeResult:
+        yield Vertical(
+            Label("Please confirm", classes="modal_title"),
+            Static(self.prompt, classes="confirm_text"),
+            Horizontal(
+                Button("Cancel", id="cancel"),
+                Button(self.confirm_label, id="confirm", variant="error"),
+                classes="modal_actions",
+            ),
+            classes="modal_window",
+        )
+
+    def on_mount(self) -> None:
+        self.query_one("#cancel", Button).focus()
+
+    def action_cancel(self) -> None:
+        self.dismiss(False)
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "confirm":
+            self.dismiss(True)
+        else:
+            self.dismiss(False)
+
+
 class HelpScreen(ModalScreen[None]):
     BINDINGS = [("escape", "close", "Close")]
 
     def compose(self) -> ComposeResult:
         yield Vertical(
             Label("Chronicle shortcuts", classes="modal_title"),
-            Static("j/t switch tabs\nn new item\ne edit selected\nd delete selected\nspace toggle todo\n? open help\nq quit"),
+            Static(
+                "j/t switch tabs\n"
+                "n new item\n"
+                "v view selected\n"
+                "e edit selected\n"
+                "d delete selected\n"
+                "space toggle todo\n"
+                "? open help\n"
+                "q quit"
+            ),
             Horizontal(
                 Button("Close", id="close", variant="primary"),
                 classes="modal_actions",
