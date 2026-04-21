@@ -16,6 +16,22 @@ python3 -m pip install -r requirements.txt
 python3 main.py
 ```
 
+## Install as `chronicle`
+
+For a global command, install it with `pipx`:
+
+```bash
+pipx install git+https://github.com/mjbeswick/chronicle.git
+chronicle
+```
+
+For local development, you can also install the current checkout:
+
+```bash
+python3 -m pip install --user -e .
+chronicle
+```
+
 ## Controls
 
 - `j` / `t` switch between Journal and Todos
@@ -39,3 +55,15 @@ data/
 ```
 
 Chronicle does not sync data itself. Use git, Resilio, Syncthing, cloud storage, or another file-sync tool around the `data/` directory if you want syncing.
+
+## Data location
+
+An installed Chronicle stores data in your user app-data directory by default:
+
+- macOS: `~/Library/Application Support/chronicle/data`
+
+To override that location, set `CHRONICLE_HOME` before launching:
+
+```bash
+CHRONICLE_HOME=~/my-chronicle chronicle
+```

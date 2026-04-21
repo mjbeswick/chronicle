@@ -2,13 +2,22 @@ from __future__ import annotations
 
 from collections import defaultdict
 from datetime import date
+import os
 from pathlib import Path
 from typing import Protocol
 
 from app.models import JournalEntry, TimelineDay, TimelineEvent, TodoItem
 from models.storage import FileStorage
+from platformdirs import user_data_dir
 
 UNSET = object()
+
+
+def default_project_root() -> Path:
+    configured_home = os.environ.get("CHRONICLE_HOME")
+    if configured_home:
+        return Path(configured_home).expanduser().resolve()
+    return Path(user_data_dir("chronicle", "mjbeswick")).resolve()
 
 
 class StorageBackend(Protocol):
@@ -51,7 +60,7 @@ class StorageBackend(Protocol):
 
 class ChronicleStorageAdapter(StorageBackend):
     def __init__(self, project_root: str | Path | None = None) -> None:
-        root = Path(project_root) if project_root is not None else Path(__file__).resolve().parents[1]
+        root = Path(project_root).expanduser().resolve() if project_root is not None else default_project_root()
         self.backend = FileStorage(project_root=root)
 
     def list_journal_entries(self) -> list[JournalEntry]:

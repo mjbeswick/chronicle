@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "chronicle"
+version = "0.1.0"
+description = "A calm Textual TUI for journaling and todo tracking."
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+  "platformdirs>=4,<5",
+  "textual>=0.58,<1.0",
+]
+
+[project.scripts]
+chronicle = "main:main"
+
+[tool.setuptools]
+py-modules = ["main"]
+
+[tool.setuptools.packages.find]
+include = ["app*", "models*", "views*"]

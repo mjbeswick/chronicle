@@ -6,6 +6,7 @@ __pycache__/
 .venv/
 dist/
 build/
+*.egg-info/
 tests/.workspace/
 
 # Keep sample data structure, ignore editor noise inside data folders.
