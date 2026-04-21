@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from datetime import date
+from datetime import date, datetime
 import os
 from pathlib import Path
 from typing import Protocol
@@ -33,12 +33,11 @@ class StorageBackend(Protocol):
     def create_entry(self, title: str, content: str) -> JournalEntry:
         ...
 
-    def update_entry(self, entry_id: str, *, title: str, content: str) -> JournalEntry:
+    def update_entry(self, entry_id: str, *, title: str, content: str, created_at: datetime | None = None) -> JournalEntry:
         ...
 
     def delete_entry(self, entry_id: str) -> None:
         ...
-
     def create_todo(self, title: str, due_date: date | None = None) -> TodoItem:
         ...
 
@@ -82,8 +81,8 @@ class ChronicleStorageAdapter(StorageBackend):
     def create_entry(self, title: str, content: str) -> JournalEntry:
         return self._map_entry(self.backend.create_journal_entry(title=title, content=content))
 
-    def update_entry(self, entry_id: str, *, title: str, content: str) -> JournalEntry:
-        return self._map_entry(self.backend.update_journal_entry(entry_id, title=title, content=content))
+    def update_entry(self, entry_id: str, *, title: str, content: str, created_at: datetime | None = None) -> JournalEntry:
+        return self._map_entry(self.backend.update_journal_entry(entry_id, title=title, content=content, created_at=created_at))
 
     def delete_entry(self, entry_id: str) -> None:
         self.backend.delete_journal_entry(entry_id)

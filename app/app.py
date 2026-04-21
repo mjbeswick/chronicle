@@ -296,7 +296,7 @@ class ChronicleApp(App[None]):
 
     def _handle_updated_entry(self, entry_id: str, result: EntryFormData | None) -> None:
         if isinstance(result, EntryFormData):
-            self.storage.update_entry(entry_id, title=result.title, content=result.content)
+            self.storage.update_entry(entry_id, title=result.title, content=result.content, created_at=result.created_at)
             self.notify("Journal entry updated.")
             self.refresh_views()
             self._apply_tab_state("journal")

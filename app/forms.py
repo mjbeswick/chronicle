@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import os
+import re
 import threading
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime, timedelta
 from typing import Optional
 
 from textual.app import ComposeResult
@@ -20,6 +21,54 @@ from .voice import RELEASE_DELAY, REPEAT_DELAY, VoiceRecorder, is_available, tra
 class EntryFormData:
     title: str
     content: str
+    created_at: datetime | None = None  # None → keep existing
+
+
+def _parse_entry_datetime(raw: str, existing_local: datetime) -> datetime | None:
+    """Parse a user date/time string into a UTC-aware datetime.
+
+    Accepts: YYYY-MM-DD, YYYY-MM-DD HH:MM, YYYY-MM-DDTHH:MM,
+             today, yesterday, N days ago.
+    Returns None on parse failure. existing_local provides the fallback
+    time-of-day when only a date is given.
+    """
+    raw = raw.strip()
+    if not raw:
+        return None
+
+    local_tz = existing_local.tzinfo
+    today = existing_local.date()
+
+    def _with_date(d: date) -> datetime:
+        return existing_local.replace(year=d.year, month=d.month, day=d.day)
+
+    raw_lower = raw.lower()
+    if raw_lower == "now":
+        return datetime.now().astimezone()
+    if raw_lower == "today":
+        return _with_date(today)
+    if raw_lower == "yesterday":
+        return _with_date(today - timedelta(days=1))
+
+    m = re.match(r'^(\d+) days? ago$', raw_lower)
+    if m:
+        return _with_date(today - timedelta(days=int(m.group(1))))
+
+    # Date only: YYYY-MM-DD
+    try:
+        return _with_date(date.fromisoformat(raw))
+    except ValueError:
+        pass
+
+    # Full datetime
+    for fmt in ('%Y-%m-%d %H:%M', '%Y-%m-%dT%H:%M', '%Y-%m-%d %H:%M:%S', '%Y-%m-%dT%H:%M:%S'):
+        try:
+            naive = datetime.strptime(raw, fmt)
+            return naive.replace(tzinfo=local_tz)
+        except ValueError:
+            continue
+
+    return None
 
 
 @dataclass
@@ -247,9 +296,15 @@ class EntryFormScreen(ModalScreen[Optional[EntryFormData]]):
         self.entry = entry
 
     def compose(self) -> ComposeResult:
+        dt_value = self.entry.created_at.astimezone().strftime("%Y-%m-%d %H:%M") if self.entry else ""
         yield Vertical(
             Label("Edit journal entry" if self.entry else "New journal entry", classes="modal_title"),
             VoiceInput(value=self.entry.title if self.entry else "", placeholder="Title", id="entry-title"),
+            Input(
+                value=dt_value,
+                placeholder="Date & time (YYYY-MM-DD HH:MM, today, yesterday…)",
+                id="entry-datetime",
+            ),
             VoiceTextArea(
                 self.entry.content if self.entry else "",
                 id="entry-content",
@@ -279,11 +334,21 @@ class EntryFormScreen(ModalScreen[Optional[EntryFormData]]):
     def _submit(self) -> None:
         title = self.query_one("#entry-title", VoiceInput).value.strip()
         content = self.query_one("#entry-content", VoiceTextArea).text.strip()
+        dt_raw = self.query_one("#entry-datetime", Input).value.strip()
         error = self.query_one("#entry-error", Label)
         if not title:
             error.update("Title is required.")
             return
-        self.dismiss(EntryFormData(title=title, content=content))
+
+        created_at: datetime | None = None
+        if dt_raw:
+            existing_local = (self.entry.created_at if self.entry else datetime.now()).astimezone()
+            created_at = _parse_entry_datetime(dt_raw, existing_local)
+            if created_at is None:
+                error.update("Unrecognised date — try YYYY-MM-DD HH:MM or 'yesterday'.")
+                return
+
+        self.dismiss(EntryFormData(title=title, content=content, created_at=created_at))
 
 
 class TodoFormScreen(ModalScreen[Optional[TodoFormData]]):

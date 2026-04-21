@@ -133,6 +133,7 @@ class FileStorage:
         title: str | None = None,
         content: str | None = None,
         tags: Iterable[str] | None = None,
+        created_at: datetime | None = None,
     ) -> JournalEntry:
         entry = self.get_journal_entry(entry_id)
         if title is not None:
@@ -141,6 +142,8 @@ class FileStorage:
             entry.content = content
         if tags is not None:
             entry.tags = list(tags)
+        if created_at is not None:
+            entry.created_at = created_at
         return self.save_journal_entry(entry)
 
     def update_entry(
@@ -150,8 +153,9 @@ class FileStorage:
         title: str | None = None,
         content: str | None = None,
         tags: Iterable[str] | None = None,
+        created_at: datetime | None = None,
     ) -> JournalEntry:
-        return self.update_journal_entry(entry_id, title=title, content=content, tags=tags)
+        return self.update_journal_entry(entry_id, title=title, content=content, tags=tags, created_at=created_at)
 
     def get_journal_entry(self, entry_id: str) -> JournalEntry:
         for metadata_path in self._iter_json_files(self.journal_dir):
