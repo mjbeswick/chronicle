@@ -43,11 +43,12 @@ class ChronicleApp(App[None]):
     #todo-tree { height: 1fr; }
 
     ChronicleHeader {
+        dock: right;
+        width: auto;
         height: 1;
-        dock: top;
         background: transparent;
         color: $text;
-        padding: 0;
+        padding: 0 1;
     }
 
     StatusBar {
@@ -141,7 +142,6 @@ class ChronicleApp(App[None]):
         self._last_ctrl_c = 0.0
 
     def compose(self) -> ComposeResult:
-        yield ChronicleHeader()
         yield StatusBar()
         with TabbedContent(id="body", initial="journal"):
             with TabPane("Journal", id="journal"):
@@ -156,6 +156,9 @@ class ChronicleApp(App[None]):
     def on_mount(self) -> None:
         self._status_bar = self.query_one(StatusBar)
         self._ctrl_hint_timer = None
+        from textual.widgets import Tabs
+        tabs = self.query_one(TabbedContent).query_one(Tabs)
+        tabs.mount(ChronicleHeader())
         self.refresh_views()
         import threading
         from app.voice import warmup

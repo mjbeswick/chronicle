@@ -20,7 +20,7 @@ class ChronicleHeader(Static):
     def _refresh_clock(self) -> None:
         now = datetime.now().astimezone()
         clock = f"{now.strftime('%a %b')} {now.day}  {now.strftime('%H:%M')}"
-        text = Text(clock, style="bold", justify="center")
+        text = Text(clock, style="bold", justify="right")
         self.update(text)
 
 
