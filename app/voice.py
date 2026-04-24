@@ -3,11 +3,14 @@ from __future__ import annotations
 
 import os
 import queue
+import signal
 import subprocess
 import tempfile
 import threading
+import time
 import wave
 from pathlib import Path
+from typing import Callable, Optional
 
 try:
     import sounddevice as sd  # type: ignore
@@ -48,15 +51,19 @@ SFSpeechRecognizer.requestAuthorization { status in
     let req = SFSpeechURLRecognitionRequest(url: url)
     req.shouldReportPartialResults = false
     if #available(macOS 13.0, *) { req.requiresOnDeviceRecognition = true }
-    recognizer.recognitionTask(with: req) { res, _ in
+    recognizer.recognitionTask(with: req) { res, err in
         if let res = res, res.isFinal {
             transcription = res.bestTranscription.formattedString
         }
-        done = true
+        // Only mark done when the task is complete: final result or error.
+        if res?.isFinal == true || err != nil {
+            done = true
+        }
     }
 }
 
-while !done {
+let deadline = Date(timeIntervalSinceNow: 8.0)
+while !done && Date() < deadline {
     RunLoop.current.run(mode: .default, before: Date(timeIntervalSinceNow: 0.1))
 }
 
@@ -112,23 +119,80 @@ def warmup() -> None:
         _compile_binary()
 
 
+TRANSCRIBE_TIMEOUT = 10.0  # seconds — Swift side has its own 8s deadline
+
+
+def _log(msg: str) -> None:
+    """Append one line to ~/Library/Logs/chronicle-voice.log. Never raises."""
+    try:
+        path = Path.home() / "Library" / "Logs" / "chronicle-voice.log"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with open(path, "a") as f:
+            f.write(f"{time.strftime('%H:%M:%S')} {msg}\n")
+    except Exception:
+        pass
+
+
 def transcribe_file(wav_path: str) -> str | None:
-    """Transcribe a WAV file. Blocks. Returns text or None on failure."""
+    """Transcribe a WAV file. Blocks up to TRANSCRIBE_TIMEOUT. Returns text or None."""
     bin_path = _binary_path()
     if not bin_path.exists():
         if not _compile_binary():
+            _log("transcribe: no binary, compile failed")
             return None
+
+    # Redirect Swift stdout to a temp file rather than a pipe. On macOS the
+    # Speech framework's dispatch queues can hold the write end of a stdout
+    # pipe open past the binary's exit(), which makes communicate() block
+    # well past its timeout. wait() on a file-backed stdout isn't affected.
+    out_file = tempfile.NamedTemporaryFile(suffix=".txt", delete=False)
+    out_file.close()
+    out_path = out_file.name
+
+    out_fh = None
     try:
-        result = subprocess.run(
+        _log(f"transcribe: launching {bin_path} {wav_path}")
+        out_fh = open(out_path, "wb")
+        proc = subprocess.Popen(
             [str(bin_path), wav_path],
-            capture_output=True,
-            text=True,
-            timeout=30,
+            stdout=out_fh,
+            stderr=subprocess.DEVNULL,
+            stdin=subprocess.DEVNULL,
+            preexec_fn=os.setsid,
+            close_fds=True,
         )
-        if result.returncode == 0:
-            return result.stdout.strip() or None
-    except Exception:
-        pass
+        out_fh.close()
+        out_fh = None
+        try:
+            rc = proc.wait(timeout=TRANSCRIBE_TIMEOUT)
+            _log(f"transcribe: exited rc={rc}")
+            if rc == 0:
+                with open(out_path, "rb") as f:
+                    text = f.read().decode(errors="replace").strip()
+                _log(f"transcribe: got {len(text)} chars")
+                return text or None
+        except subprocess.TimeoutExpired:
+            _log("transcribe: timeout — SIGKILL process group")
+            try:
+                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+            except OSError:
+                proc.kill()
+            try:
+                proc.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                _log("transcribe: process still alive after SIGKILL (!)")
+    except Exception as e:
+        _log(f"transcribe: exception {e!r}")
+    finally:
+        if out_fh is not None:
+            try:
+                out_fh.close()
+            except OSError:
+                pass
+        try:
+            os.unlink(out_path)
+        except OSError:
+            pass
     return None
 
 
@@ -181,3 +245,143 @@ class VoiceRecorder:
             wf.setframerate(SAMPLE_RATE)
             wf.writeframes(np.concatenate(chunks).tobytes())
         return tmp.name
+
+
+class ViewVoiceHoldHandler:
+    """Hold-space → record → release → transcribe → on_transcript(text).
+
+    Used by main views (no text field to insert into). Short space taps are
+    swallowed; holds (detected via key auto-repeat inside REPEAT_DELAY) start
+    recording. Any non-space key during recording aborts and discards.
+    """
+
+    def __init__(
+        self,
+        widget,
+        on_transcript: Callable[[str], None],
+    ) -> None:
+        self._widget = widget
+        self._on_transcript = on_transcript
+        self._vr: Optional[VoiceRecorder] = VoiceRecorder() if is_available() else None
+        self._pending = False
+        self._recording = False
+        self._repeat_timer = None
+        self._release_timer = None
+
+    @property
+    def available(self) -> bool:
+        return self._vr is not None
+
+    def handle_key(self, event) -> bool:
+        """Return True if the event was consumed (caller should stop it)."""
+        if self._vr is None:
+            return False
+        if event.key == "space":
+            return self._handle_space()
+        self._cancel()
+        return False
+
+    def _handle_space(self) -> bool:
+        if self._recording:
+            if self._release_timer:
+                self._release_timer.stop()
+            self._release_timer = self._widget.set_timer(
+                RELEASE_DELAY, self._on_release
+            )
+            return True
+
+        if not self._pending:
+            self._pending = True
+            self._repeat_timer = self._widget.set_timer(
+                REPEAT_DELAY, self._on_no_repeat
+            )
+            return True
+
+        # Second space within REPEAT_DELAY → hold confirmed
+        self._pending = False
+        if self._repeat_timer:
+            self._repeat_timer.stop()
+            self._repeat_timer = None
+        if self._vr and self._vr.start():
+            self._recording = True
+            try:
+                self._widget.app.set_voice_state("recording")
+            except Exception:
+                pass
+            self._release_timer = self._widget.set_timer(
+                RELEASE_DELAY, self._on_release
+            )
+        return True
+
+    def _cancel(self) -> None:
+        """Non-space key pressed — abort pending or recording state."""
+        if self._pending:
+            self._pending = False
+            if self._repeat_timer:
+                self._repeat_timer.stop()
+                self._repeat_timer = None
+        if self._recording:
+            self._recording = False
+            if self._release_timer:
+                self._release_timer.stop()
+                self._release_timer = None
+            wav = self._vr.stop_and_save() if self._vr else None
+            if wav:
+                try:
+                    os.unlink(wav)
+                except OSError:
+                    pass
+            try:
+                self._widget.app.set_voice_state("idle")
+            except Exception:
+                pass
+
+    def _on_no_repeat(self) -> None:
+        self._pending = False
+        self._repeat_timer = None
+
+    def _on_release(self) -> None:
+        self._release_timer = None
+        if not self._recording:
+            return
+        self._recording = False
+        wav = self._vr.stop_and_save() if self._vr else None
+        app = self._widget.app
+        if not wav:
+            try:
+                app.set_voice_state("idle")
+            except Exception:
+                pass
+            return
+        try:
+            app.set_voice_state("transcribing")
+        except Exception:
+            pass
+        threading.Thread(
+            target=self._transcribe, args=(wav, app), daemon=True
+        ).start()
+
+    def _transcribe(self, wav_path: str, app) -> None:
+        text: Optional[str] = None
+        try:
+            text = transcribe_file(wav_path)
+        except Exception:
+            pass
+        try:
+            os.unlink(wav_path)
+        except OSError:
+            pass
+        try:
+            app.call_from_thread(app.set_voice_state, "idle")
+        except Exception:
+            pass
+        if text:
+            try:
+                app.call_from_thread(self._on_transcript, text)
+            except Exception:
+                pass
+        else:
+            try:
+                app.call_from_thread(app.notify, "Transcription failed.", severity="warning")
+            except Exception:
+                pass

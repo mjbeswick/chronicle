@@ -1,10 +1,18 @@
 """Chronicle entry point."""
 
-from app.app import ChronicleApp
+import sys
 
 
 def main() -> None:
-    """Run the Chronicle Textual application."""
+    """Run Chronicle — TUI by default, CLI when a subcommand is given."""
+    from app.cli import SUBCOMMANDS
+
+    argv = sys.argv[1:]
+    if argv and (argv[0] in SUBCOMMANDS or argv[0].startswith("-")):
+        from app.cli import run
+        sys.exit(run(argv))
+
+    from app.app import ChronicleApp
     ChronicleApp().run()
 
 

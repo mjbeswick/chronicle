@@ -8,30 +8,25 @@ from textual.widgets import Static
 
 
 class ChronicleHeader(Static):
-    active_tab = reactive("journal")
+    """Top header: centered clock flanked by horizontal rule lines."""
 
-    def render(self) -> Text:
+    def on_mount(self) -> None:
+        self._refresh_clock()
+        self.set_interval(30, self._refresh_clock)
+
+    def on_resize(self) -> None:
+        self._refresh_clock()
+
+    def _refresh_clock(self) -> None:
         now = datetime.now().astimezone()
-        today = f"{now.strftime('%a %b')} {now.day}"
-        tabs = Text()
-        tabs.append(" Journal ", style="reverse" if self.active_tab == "journal" else "bold")
-        tabs.append(" ")
-        tabs.append(" Todos ", style="reverse" if self.active_tab == "todos" else "bold")
-
-        header = Text.assemble(
-            (" Chronicle ", "bold black on cyan"),
-            ("  ", ""),
-            tabs,
-            ("  ", ""),
-            (today, "bold magenta"),
-            ("  ", ""),
-            ("? help", "dim"),
-        )
-        return header
+        clock = f"{now.strftime('%a %b')} {now.day}  {now.strftime('%H:%M')}"
+        text = Text(clock, style="bold", justify="center")
+        self.update(text)
 
 
 class StatusBar(Static):
-    message = reactive("")
+    hints: reactive[list[tuple[str, str]]] = reactive([], layout=False)
+    count = reactive("", layout=False)
     voice_state = reactive("idle")  # "idle" | "recording" | "transcribing"
 
     def render(self) -> Text:
@@ -39,4 +34,14 @@ class StatusBar(Static):
             return Text("🎙  Recording… release space to stop", style="bold white on red")
         if self.voice_state == "transcribing":
             return Text("⏳  Transcribing…", style="bold black on yellow")
-        return Text(self.message, style="black on white")
+
+        text = Text()
+        for i, (key, desc) in enumerate(self.hints):
+            if i > 0:
+                text.append("  ·  ", style="dim")
+            text.append(key, style="bold")
+            text.append(f" {desc}", style="dim")
+        if self.count:
+            text.append("  —  ", style="dim")
+            text.append(self.count, style="dim italic")
+        return text

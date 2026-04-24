@@ -1,50 +1,7 @@
+"""Re-export of the unified Item model for app-side callers."""
+
 from __future__ import annotations
 
-from dataclasses import dataclass
-from datetime import date, datetime
-from typing import Literal
+from models.item import Item, utc_now
 
-
-TimelineSource = Literal["entry", "todo_activity"]
-
-
-@dataclass
-class JournalEntry:
-    id: str
-    title: str
-    content: str
-    created_at: datetime
-    updated_at: datetime
-
-
-@dataclass
-class TodoItem:
-    id: str
-    title: str
-    due_date: date | None
-    completed: bool
-    created_at: datetime
-    updated_at: datetime
-    completed_at: datetime | None = None
-
-
-@dataclass
-class TimelineEvent:
-    id: str
-    source: TimelineSource
-    event_type: str
-    occurred_at: datetime
-    title: str
-    details: str
-    entry_id: str | None = None
-    todo_id: str | None = None
-
-    @property
-    def editable(self) -> bool:
-        return self.source == "entry" and self.entry_id is not None
-
-
-@dataclass
-class TimelineDay:
-    label: date
-    events: list[TimelineEvent]
+__all__ = ["Item", "utc_now"]
