@@ -1,5 +1,9 @@
 # Chronicle — Project Notes for Claude
 
+## Workflow
+
+Commit after every logical change. A change is "done" when it runs and tests pass; at that point, stage and commit before moving on. Don't pile multiple unrelated changes into one commit — one coherent change per commit, with a message describing the why.
+
 ## Data Model — One `Item`, Four Lenses
 
 There is exactly one persisted entity (`models.item.Item`) with optional time coordinates. Journal / Todos / Notes / Calendar are **lenses** — pure filter predicates over the single item store. Do not add entity-specific types; extend `Item` or add new lens predicates instead.
