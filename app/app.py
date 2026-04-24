@@ -158,7 +158,7 @@ class ChronicleApp(App[None]):
         self._ctrl_hint_timer = None
         from textual.widgets import Tabs
         tabs = self.query_one(TabbedContent).query_one(Tabs)
-        tabs.mount(ChronicleHeader())
+        tabs.query_one("#tabs-list").mount(ChronicleHeader())
         self.refresh_views()
         import threading
         from app.voice import warmup
