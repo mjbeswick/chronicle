@@ -162,7 +162,7 @@ class ChronicleApp(App[None]):
         threading.Thread(target=warmup, daemon=True).start()
 
     def on_key(self, event) -> None:
-        if event.key.startswith("ctrl+"):
+        if event.key.startswith("ctrl+") and len(self.screen_stack) <= 1:
             self._show_ctrl_hints()
 
     # ---------------------------------------------------------------- refresh
@@ -504,6 +504,8 @@ class ChronicleApp(App[None]):
         self._ctrl_hint_timer = self.set_timer(self.CTRL_HINT_WINDOW, self._refresh_status)
 
     def _refresh_status(self, selected: Item | None = None) -> None:
+        if len(self.screen_stack) > 1:
+            return
         if self.active_tab == "journal":
             selected_item = selected if isinstance(selected, Item) else self.query_one(JournalView).selected_item()
             hints: list[tuple[str, str]] = [
