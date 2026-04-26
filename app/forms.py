@@ -540,7 +540,7 @@ class ConfirmActionScreen(ModalScreen[bool]):
 
 def _help_shortcuts() -> Text:
     bindings = [
-        ("ctrl+j/t/n/c", "switch tabs (journal/todos/notes/calendar)"),
+        ("ctrl+j/t/n/s/c", "switch tabs (journal/todos/notes/schedule/calendar)"),
         ("n", "new item"),
         ("hold space", "voice-create new item"),
         ("v", "view selected"),
@@ -551,7 +551,7 @@ def _help_shortcuts() -> Text:
         ("ctrl+l", "cycle journal layout"),
         ("ctrl+enter", "save (in forms)"),
         ("?", "open help"),
-        ("q", "quit"),
+        ("ctrl+q", "quit"),
     ]
     text = Text()
     for key, desc in bindings:

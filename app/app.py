@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-import time
-from datetime import date
+from datetime import date, timedelta
 
 from textual.app import App, ComposeResult
 from textual.binding import Binding
@@ -22,6 +21,7 @@ from app.storage import ChronicleStorageAdapter, StorageBackend
 from views.calendar import CalendarView
 from views.journal import JournalView
 from views.notes import NotesView
+from views.schedule import ScheduleView
 from views.todos import TodosView
 
 
@@ -32,7 +32,7 @@ def _notes_status_hints(has_selection: bool) -> list[tuple[str, str]]:
     ]
     if has_selection:
         hints += [("e", "edit"), ("d", "delete"), ("#", "tags")]
-    hints += [("f", "filter"), ("?", "help"), ("q", "quit")]
+    hints += [("f", "filter"), ("?", "help"), ("^q", "quit")]
     return hints
 
 
@@ -49,7 +49,7 @@ def _todos_status_hints(has_selection: bool) -> list[tuple[str, str]]:
             ("d", "delete"),
             ("x", "toggle"),
         ]
-    hints += [("?", "help"), ("q", "quit")]
+    hints += [("?", "help"), ("^q", "quit")]
     return hints
 
 
@@ -66,7 +66,7 @@ class ChronicleApp(App[None]):
     TabbedContent { height: 1fr; }
     TabPane { padding: 0; height: 1fr; }
 
-    JournalView, TodosView, NotesView, CalendarView { height: 1fr; }
+    JournalView, TodosView, NotesView, CalendarView, ScheduleView { height: 1fr; }
 
     #todo-tree { height: 1fr; }
 
@@ -142,6 +142,7 @@ class ChronicleApp(App[None]):
         Binding("ctrl+j", "switch_tab('journal')", "Journal"),
         Binding("ctrl+t", "switch_tab('todos')", "Todos"),
         Binding("ctrl+n", "switch_tab('notes')", "Notes"),
+        Binding("ctrl+s", "switch_tab('schedule')", "Schedule"),
         Binding("ctrl+c", "ctrl_c", "Calendar", priority=True),
         Binding("n", "new_item", "New"),
         Binding("N", "new_subtask", "Subtask", show=False),
@@ -157,17 +158,15 @@ class ChronicleApp(App[None]):
         Binding("ctrl+l", "cycle_journal_layout", "Layout", show=False),
         Binding("question_mark", "open_help", "Help"),
         Binding("escape", "quit", "Quit", show=False),
-        Binding("q", "quit", "Quit"),
+        Binding("ctrl+q", "quit", "Quit"),
     ]
 
-    CTRL_C_DOUBLE_WINDOW = 1.5
     CTRL_HINT_WINDOW = 1.8
 
     def __init__(self, storage: StorageBackend | None = None) -> None:
         super().__init__()
         self.storage = storage or ChronicleStorageAdapter()
         self.active_tab = "journal"
-        self._last_ctrl_c = 0.0
 
     def compose(self) -> ComposeResult:
         yield StatusBar()
@@ -178,6 +177,8 @@ class ChronicleApp(App[None]):
                 yield TodosView()
             with TabPane("Notes", id="notes"):
                 yield NotesView()
+            with TabPane("Schedule", id="schedule"):
+                yield ScheduleView()
             with TabPane("Calendar", id="calendar"):
                 yield CalendarView()
 
@@ -206,6 +207,16 @@ class ChronicleApp(App[None]):
         journal_items = [i for i in items if i.in_journal(now)]
         todo_items = [i for i in items if i.in_todos(now) or i.is_done]
         note_items = [i for i in items if i.in_notes()]
+        
+        # Schedule items: open items with at/due in next 7 days
+        end_date = today + timedelta(days=7)
+        schedule_items = [
+            i for i in items
+            if not i.is_done and (
+                (i.at and i.at.astimezone().date() >= today and i.at.astimezone().date() <= end_date) or
+                (i.due and i.due >= today and i.due <= end_date)
+            )
+        ]
 
         entry_dates = {
             i.timeline_at(now).astimezone().date()
@@ -223,6 +234,7 @@ class ChronicleApp(App[None]):
         self.query_one(JournalView).refresh_view(journal_items)
         self.query_one(TodosView).refresh_view(todo_items)
         self.query_one(NotesView).refresh_view(note_items)
+        self.query_one(ScheduleView).refresh_view(schedule_items)
         self.query_one(CalendarView).refresh_view(entry_dates, due_dates, overdue_dates)
 
         self._items_total = len(items)
@@ -244,6 +256,8 @@ class ChronicleApp(App[None]):
             self.query_one(JournalView).focus_content()
         elif self.active_tab == "notes":
             self.query_one(NotesView).focus_content()
+        elif self.active_tab == "schedule":
+            self.query_one(ScheduleView).focus_content()
         elif self.active_tab == "calendar":
             self.query_one(CalendarView).focus()
         else:
@@ -288,14 +302,8 @@ class ChronicleApp(App[None]):
             tc.active = tab_name
 
     def action_ctrl_c(self) -> None:
-        now = time.monotonic()
-        if now - self._last_ctrl_c < self.CTRL_C_DOUBLE_WINDOW:
-            self.exit()
-            return
-        self._last_ctrl_c = now
         if self.screen is self.screen_stack[0]:
             self._switch_to_tab("calendar")
-        self.notify("Press ctrl+c again to quit.", timeout=self.CTRL_C_DOUBLE_WINDOW)
 
     # ---------------------------------------------------------------- new
 
@@ -525,8 +533,9 @@ class ChronicleApp(App[None]):
             ("^j", "journal"),
             ("^t", "todos"),
             ("^n", "notes"),
+            ("^s", "schedule"),
             ("^c", "calendar"),
-            ("^c ^c", "quit"),
+            ("^q", "quit"),
             ("^l", "layout"),
         ]
         self._status_bar.count = ""

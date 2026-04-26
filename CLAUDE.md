@@ -38,12 +38,12 @@ Chronicle follows a strict split between **ctrl+key** (tab switching and app-lev
 - `ctrl+j` — Journal
 - `ctrl+t` — Todos
 - `ctrl+n` — Notes
-- `ctrl+c` — Calendar (single press; also armed quit-trigger — see below)
+- `ctrl+s` — Schedule
+- `ctrl+c` — Calendar
 
 ### Quit
-- `q` — quit immediately
+- `ctrl+q` — quit immediately
 - `escape` — quit from main views; closes the modal when one is open (screen bindings win)
-- `ctrl+c` twice within `CTRL_C_DOUBLE_WINDOW` (1.5s) — quit from anywhere, including modals. Single `ctrl+c` on main view also switches to Calendar, which is intentional.
 
 ### App-level overlays
 - `ctrl+l` — cycle Journal layout preset: **Dates | Table / Content** → **Dates | Table** → **Dates | Table | Content** (three columns) → **Table only**. Dispatches to `JournalView.cycle_layout()`; only active when the Journal tab is showing.
