@@ -38,11 +38,9 @@ class StatusBar(Static):
         text = Text()
         for i, (key, desc) in enumerate(self.hints):
             if i > 0:
-                text.append(" ", style="dim")
-            text.append("command:", style="dim")
+                text.append("  ", style="dim")
+            text.append(f"{desc}:", style="dim")
             text.append(key, style="bold")
-            text.append(" help:", style="dim")
-            text.append(desc, style="bold")
         if self.count:
             text.append(" — ", style="dim")
             text.append(self.count, style="dim italic")
