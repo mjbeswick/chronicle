@@ -134,14 +134,13 @@ class ScheduleView(Container):
         yield Static("", id="schedule-display", markup=False)
 
     def on_mount(self) -> None:
-        self._render()
+        self._update_display()
 
     def refresh_view(self, items: list[Item]) -> None:
-        """Update with new items."""
         self._items = items
-        self._render()
+        self._update_display()
 
-    def _render(self) -> None:
+    def _update_display(self) -> None:
         today = date.today()
         content = _render_schedule_items(self._items, today)
         self.query_one("#schedule-display", Static).update(content)
