@@ -41,7 +41,7 @@ def _render_month(
                 elif is_cursor:
                     style = "bold reverse cyan"
                 elif d == today:
-                    style = "bold reverse"
+                    style = "bold reverse bright_cyan"
                 elif d in overdue_dates:
                     style = "bold red"
                 elif d in due_dates:
