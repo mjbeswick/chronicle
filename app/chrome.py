@@ -40,7 +40,8 @@ class StatusBar(Static):
             if i > 0:
                 text.append("  ", style="dim")
             text.append(f"{desc}:", style="dim")
-            text.append(key, style="bold")
+            text.append(f"{key}", style="bold")
+            text.append(" command", style="dim")
         if self.count:
             text.append(" — ", style="dim")
             text.append(self.count, style="dim italic")
