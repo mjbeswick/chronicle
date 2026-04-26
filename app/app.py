@@ -25,42 +25,6 @@ from views.schedule import ScheduleView
 from views.todos import TodosView
 
 
-def _journal_status_hints(has_selection: bool) -> list[tuple[str, str]]:
-    hints: list[tuple[str, str]] = [("n", "new")]
-    if has_selection:
-        hints += [("e", "edit"), ("d", "delete"), ("#", "tags")]
-    hints += [("f", "filter"), ("^l", "layout"), ("?", "help"), ("^q", "quit")]
-    return hints
-
-
-def _notes_status_hints(has_selection: bool) -> list[tuple[str, str]]:
-    hints: list[tuple[str, str]] = [("n", "new")]
-    if has_selection:
-        hints += [("e", "edit"), ("d", "delete"), ("#", "tags")]
-    hints += [("f", "filter"), ("?", "help"), ("^q", "quit")]
-    return hints
-
-
-def _todos_status_hints(has_selection: bool) -> list[tuple[str, str]]:
-    hints: list[tuple[str, str]] = [("n", "new")]
-    if has_selection:
-        hints += [
-            ("N", "subtask"),
-            ("v", "view"),
-            ("e", "edit"),
-            ("d", "delete"),
-            ("x", "toggle"),
-        ]
-    hints += [("?", "help"), ("^q", "quit")]
-    return hints
-
-
-def _schedule_status_hints() -> list[tuple[str, str]]:
-    return [("?", "help"), ("^q", "quit")]
-
-
-def _calendar_status_hints() -> list[tuple[str, str]]:
-    return [("←→", "day"), ("↑↓", "week"), ("enter", "open"), ("home", "today"), ("?", "help"), ("^q", "quit")]
 
 
 class ChronicleApp(App[None]):
@@ -558,41 +522,8 @@ class ChronicleApp(App[None]):
             return
         if not hasattr(self, "_status_bar"):
             return
-
-        tab = getattr(self, "active_tab", "journal")
-        has_sel = selected is not None
-
-        if tab == "journal":
-            if selected is None:
-                selected = self.query_one(JournalView).selected_item()
-            hints = _journal_status_hints(selected is not None)
-            count = f"{self._journal_count} entries" if hasattr(self, "_journal_count") else ""
-        elif tab == "todos":
-            if selected is None:
-                selected = self.query_one(TodosView).selected_todo()
-            hints = _todos_status_hints(selected is not None)
-            count = (
-                f"{self._todo_open} open / {self._todo_total} total"
-                if hasattr(self, "_todo_open")
-                else ""
-            )
-        elif tab == "notes":
-            if selected is None:
-                selected = self.query_one(NotesView).selected_note()
-            hints = _notes_status_hints(selected is not None)
-            count = f"{self._note_count} notes" if hasattr(self, "_note_count") else ""
-        elif tab == "schedule":
-            hints = _schedule_status_hints()
-            count = ""
-        elif tab == "calendar":
-            hints = _calendar_status_hints()
-            count = ""
-        else:
-            hints = [("?", "help"), ("^q", "quit")]
-            count = ""
-
-        self._status_bar.hints = hints
-        self._status_bar.count = count
+        self._status_bar.hints = [("^q", "quit"), ("^key", "command"), ("?", "help")]
+        self._status_bar.count = ""
 
 
 if __name__ == "__main__":
