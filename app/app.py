@@ -25,6 +25,34 @@ from views.notes import NotesView
 from views.todos import TodosView
 
 
+def _notes_status_hints(has_selection: bool) -> list[tuple[str, str]]:
+    hints: list[tuple[str, str]] = [
+        ("^j/^t/^c", "tabs"),
+        ("n", "new note"),
+    ]
+    if has_selection:
+        hints += [("e", "edit"), ("d", "delete"), ("#", "tags")]
+    hints += [("f", "filter"), ("?", "help"), ("q", "quit")]
+    return hints
+
+
+def _todos_status_hints(has_selection: bool) -> list[tuple[str, str]]:
+    hints: list[tuple[str, str]] = [
+        ("^j/^n/^c", "tabs"),
+        ("n", "new todo"),
+    ]
+    if has_selection:
+        hints += [
+            ("N", "subtask"),
+            ("v", "view"),
+            ("e", "edit"),
+            ("d", "delete"),
+            ("x", "toggle"),
+        ]
+    hints += [("?", "help"), ("q", "quit")]
+    return hints
+
+
 class ChronicleApp(App[None]):
     CSS = """
     Screen {
@@ -509,69 +537,8 @@ class ChronicleApp(App[None]):
     def _refresh_status(self, selected: Item | None = None) -> None:
         if len(self.screen_stack) > 1:
             return
-        if self.active_tab == "journal":
-            selected_item = selected if isinstance(selected, Item) else self.query_one(JournalView).selected_item()
-            hints: list[tuple[str, str]] = [
-                ("^t/^n/^c", "tabs"),
-                ("n", "new"),
-                ("hold space", "voice"),
-            ]
-            if selected_item is not None:
-                hints += [("v", "view"), ("e", "edit"), ("d", "delete"), ("x", "toggle")]
-            hints += [("^l", "layout"), ("?", "help"), ("q", "quit")]
-            n = self._journal_count
-            count = f"{n} journal {'item' if n == 1 else 'items'}"
-        elif self.active_tab == "notes":
-            view = self.query_one(NotesView)
-            hints = [
-                ("^j/^t/^c", "tabs"),
-                ("n", "new note"),
-                ("e", "edit"),
-                ("d", "delete"),
-                ("#", "tags"),
-                ("f", "filter"),
-                ("?", "help"),
-                ("q", "quit"),
-            ]
-            total = len(view._notes)
-            if view._filter.is_active:
-                visible = len(view._visible_notes())
-                count = f"Filtered - {view._filter.summary()} - {visible}/{total} notes"
-            else:
-                count = f"{total} {'note' if total == 1 else 'notes'}"
-        elif self.active_tab == "calendar":
-            hints = [
-                ("^j/^t/^n", "tabs"),
-                ("↑↓←→", "nav"),
-                ("tab", "month"),
-                ("enter", "open"),
-                ("shift+←/→", "year"),
-                ("y", "jump"),
-                ("home", "today"),
-                ("?", "help"),
-                ("q", "quit"),
-            ]
-            count = "green=entries  yellow=due  red=overdue"
-        else:
-            selected_todo = selected if isinstance(selected, Item) else self.query_one(TodosView).selected_todo()
-            hints = [
-                ("^j/^n/^c", "tabs"),
-                ("n", "new todo"),
-                ("N", "subtask"),
-                ("v", "view"),
-                ("e", "edit"),
-                ("d", "delete"),
-                ("x", "toggle" if selected_todo else "toggle todo"),
-                ("?", "help"),
-                ("q", "quit"),
-            ]
-            counts = self.query_one(TodosView).filter_counts()
-            parts = []
-            if counts["overdue"]:
-                parts.append(f"{counts['overdue']} overdue")
-            parts.append(f"{counts['open']} open")
-            parts.append(f"{counts['all']} total")
-            count = " / ".join(parts)
+        hints: list[tuple[str, str]] = [("^p", "?")]
+        count = ""
         if not hasattr(self, "_status_bar"):
             return
         self._status_bar.hints = hints
