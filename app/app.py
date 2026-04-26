@@ -546,7 +546,7 @@ class ChronicleApp(App[None]):
     def _refresh_status(self, selected: Item | None = None) -> None:
         if len(self.screen_stack) > 1:
             return
-        hints: list[tuple[str, str]] = [("^p", "?")]
+        hints: list[tuple[str, str]] = [("^q", "quit"), ("?", "help")]
         count = ""
         if not hasattr(self, "_status_bar"):
             return
